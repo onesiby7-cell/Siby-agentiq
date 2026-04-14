@@ -10,12 +10,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/siby-agentiq/siby-agentiq/internal/config"
 	"github.com/siby-agentiq/siby-agentiq/internal/provider"
@@ -494,19 +492,6 @@ func (m *ChatModel) updateViewport() {
 	m.viewport.SetContent(m.renderMessages())
 }
 
-func (m *ChatModel) renderMessages() string {
-	var sb strings.Builder
-	renderer, _ := glamour.NewRenderer(glamour.Configuration{
-		Color:               false,
-		HTML:                false,
-		Mouse:               false,
-		Math:                false,
-		CodeBlock:           "┌─",
-		CodeBlockBackground: string(Nord.PolarNight2),
-		HeadingStyles:       true,
-		Rule:                true,
-		ItemStyles:          true,
-		OrderedListStyle:    "numeric",
 	})
 
 	for i, msg := range m.messages {
@@ -645,10 +630,4 @@ func formatProviderStatus(pm *provider.ProviderManager) string {
 	return sb.String()
 }
 
-type clipboardModel struct {
-	show   bool
-	text   string
-	copied bool
-}
 
-var clipboardSupported = clipboard.Available()

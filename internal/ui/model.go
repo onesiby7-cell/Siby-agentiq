@@ -14,7 +14,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/siby-agentiq/siby-agentiq/internal/config"
 	"github.com/siby-agentiq/siby-agentiq/internal/executor"
@@ -890,9 +889,6 @@ func (m *Model) updateViewport() {
 
 func (m *Model) renderMessages() string {
 	var sb strings.Builder
-	r, _ := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(),
-		glamour.WithWordWrap(m.width-4),
 	)
 
 	for _, msg := range m.messages {
