@@ -1,0 +1,57 @@
+{
+  "name": "siby-agentiq",
+  "version": "2.0.0",
+  "description": "Siby-Agentiq - The Last Agent You Will Ever Need. Sovereign AI coding agent powered by Ibrahim Siby",
+  "main": "dist/index.js",
+  "bin": {
+    "siby": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build && node scripts/download-binary.js",
+    "postinstall": "node scripts/postinstall.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "copilot",
+    "siby",
+    "agent",
+    "assistant",
+    "llm",
+    "cli",
+    "developer-tools"
+  ],
+  "author": {
+    "name": "Ibrahim Siby",
+    "email": "contact@siby-agentiq.io"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/siby-agentiq/siby-agentiq.git"
+  },
+  "bugs": {
+    "url": "https://github.com/siby-agentiq/siby-agentiq/issues"
+  },
+  "homepage": "https://siby-agentiq.io",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "files": [
+    "dist/",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ]
+}

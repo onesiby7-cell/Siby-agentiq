@@ -1,0 +1,150 @@
+# Siby-Agentiq Configuration
+# Open-source AI terminal agent - 100% local capable
+
+version: "1.0"
+
+# ============================================
+# PROVIDER CONFIGURATION
+# ============================================
+providers:
+  # Primary provider (auto-switch on failure)
+  primary: "ollama"
+  
+  # Ollama (Local - Zero cost, full privacy)
+  ollama:
+    enabled: true
+    base_url: "http://localhost:11434"
+    default_model: "llama3.3:70b"
+    timeout_seconds: 120
+    stream: true
+    keep_alive: "5m"
+    
+  # Anthropic Cloud (Best reasoning)
+  anthropic:
+    enabled: true
+    api_key: "${ANTHROPIC_API_KEY}"
+    default_model: "claude-sonnet-4-20250514"
+    max_tokens: 8192
+    temperature: 0.7
+    
+  # OpenAI Cloud (Fast, capable)
+  openai:
+    enabled: true
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    default_model: "gpt-4o"
+    temperature: 0.7
+
+# ============================================
+# CHAIN OF THOUGHT SETTINGS
+# ============================================
+chain_of_thought:
+  enabled: true
+  reasoning_depth: "deep"  # shallow | medium | deep
+  
+  phases:
+    analyze:
+      enabled: true
+      prompt_suffix: "\n[ANALYZE: Identify the core problem, constraints, and requirements]"
+      
+    plan:
+      enabled: true
+      prompt_suffix: "\n[PLAN: Break down into actionable steps with estimated complexity]"
+      
+    execute:
+      enabled: true
+      prompt_suffix: "\n[EXECUTE: Generate clean, idiomatic code]"
+      
+    review:
+      enabled: true
+      prompt_suffix: "\n[REVIEW: Verify correctness, edge cases, and security]"
+  
+  reasoning_effort: "high"  # low | medium | high - controls token usage
+
+# ============================================
+# PROJECT SCANNER
+# ============================================
+scanner:
+  root_patterns:
+    - "*.go"
+    - "*.rs"
+    - "*.py"
+    - "*.ts"
+    - "*.tsx"
+    - "*.js"
+    - "*.jsx"
+    - "*.java"
+    - "*.cpp"
+    - "*.c"
+    - "*.rs"
+    - "Cargo.toml"
+    - "package.json"
+    - "go.mod"
+    - "requirements.txt"
+    - "pyproject.toml"
+  
+  exclude_patterns:
+    - "node_modules/**"
+    - ".git/**"
+    - "target/**"
+    - "__pycache__/**"
+    - "*.pyc"
+    - ".venv/**"
+    - "dist/**"
+    - "build/**"
+    - "*.lock"
+  
+  max_file_size_kb: 512
+  max_files_total: 10000
+  context_mode: "smart"  # minimal | smart | full
+
+# ============================================
+# TUI SETTINGS
+# ============================================
+tui:
+  theme: "nord"  # nord | dracula | monokai | catppuccin
+  show_thinking: true
+  show_tokens: true
+  show_latency: true
+  animation_speed: 50
+  
+  keybindings:
+    submit: "Enter"
+    interrupt: "Ctrl+C"
+    quit: "Ctrl+Q"
+    history_up: "Up"
+    history_down: "Down"
+    clear: "Ctrl+L"
+    
+  layout:
+    left_panel_width: 40
+    show_file_tree: true
+    show_reasoning: true
+
+# ============================================
+# AGENT BEHAVIOR
+# ============================================
+agent:
+  max_iterations: 10
+  auto_save: true
+  auto_lint: false
+  confirm_destructive: true
+  tool_timeout_seconds: 30
+  
+  tools:
+    read: true
+    write: true
+    execute: true
+    search: true
+    grep: true
+    bash: true
+
+# ============================================
+# PERFORMANCE
+# ============================================
+performance:
+  parallel_scanning: true
+  cache_context: true
+  cache_ttl_minutes: 30
+  stream_responses: true
+  max_concurrent_requests: 3

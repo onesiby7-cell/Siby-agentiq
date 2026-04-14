@@ -1,0 +1,129 @@
+# Siby-Agentiq Configuration
+# Open-source AI Terminal Agent
+
+app:
+  name: "Siby-Agentiq"
+  version: "0.1.0"
+  debug: false
+  log_file: "~/.siby-agentiq/logs/siby.log"
+
+# Provider Configuration - Switch between local and cloud models
+provider:
+  # Active provider: "ollama", "anthropic", "openai"
+  active: "ollama"
+  
+  # Ollama (Local) Configuration
+  ollama:
+    base_url: "http://localhost:11434"
+    model: "llama3.2:latest"
+    timeout: 120
+    stream: true
+    keep_alive: "5m"
+  
+  # Anthropic Cloud Configuration
+  anthropic:
+    api_key: ""
+    model: "claude-sonnet-4-20250514"
+    max_tokens: 8192
+    temperature: 0.7
+    stream: true
+  
+  # OpenAI Cloud Configuration
+  openai:
+    api_key: ""
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4o"
+    max_tokens: 4096
+    temperature: 0.7
+    stream: true
+
+# Agent Behavior Configuration
+agent:
+  # Chain of Thought settings
+  chain_of_thought:
+    enabled: true
+    max_iterations: 5
+    reflection_enabled: true
+  
+  # Context settings
+  context:
+    max_tokens: 128000
+    project_scan_depth: 10
+    include_patterns:
+      - "*.go"
+      - "*.rs"
+      - "*.ts"
+      - "*.js"
+      - "*.py"
+      - "*.java"
+      - "*.cpp"
+      - "*.c"
+      - "*.h"
+      - "*.md"
+      - "*.yaml"
+      - "*.yml"
+      - "*.json"
+      - "*.toml"
+    exclude_patterns:
+      - ".git/**"
+      - "node_modules/**"
+      - "target/**"
+      - "dist/**"
+      - "build/**"
+      - "*.exe"
+      - "*.dll"
+      - ".env"
+      - ".DS_Store"
+  
+  # Code generation settings
+  code_generation:
+    format_on_save: true
+    linter_enabled: false
+    auto_import: true
+    type_inference: true
+
+# TUI Configuration
+tui:
+  theme: "dark"
+  width: 120
+  height: 40
+  scrollback: 10000
+  
+  colors:
+    primary: "#7C3AED"
+    secondary: "#06B6D4"
+    success: "#10B981"
+    warning: "#F59E0B"
+    error: "#EF4444"
+    background: "#0F172A"
+    text: "#F1F5F9"
+    muted: "#64748B"
+
+  # Keybindings
+  keybindings:
+    submit: "Enter"
+    cancel: "Esc"
+    history_up: "Up"
+    history_down: "Down"
+    toggle_sidebar: "Ctrl+B"
+    clear_screen: "Ctrl+L"
+    help: "F1"
+
+# Reasoning Engine Configuration
+reasoning:
+  # Thought process visualization
+  show_thinking: true
+  show_planning: true
+  show_reflection: true
+  
+  # Planning settings
+  planning:
+    auto_generate: true
+    confirm_before_execute: true
+    estimate_complexity: true
+  
+  # Reflection settings
+  reflection:
+    critic_enabled: true
+    suggest_improvements: true
+    detect_edge_cases: true
