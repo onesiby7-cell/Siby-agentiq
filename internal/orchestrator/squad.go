@@ -1,28 +1,25 @@
 package orchestrator
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/siby-agentiq/siby-agentiq/internal/agents"
 )
 
 type Squad struct {
 	ID       string
 	Name     string
 	Symbol   string
-	Category agents.AgentCategory
+	Category string
 	mu       sync.RWMutex
 
-	agents   []*SquadAgent
-	bus      *MessageBus
-	status   SquadStatus
-	load     float32
-	tasks    int
-	results  []*SquadResult
+	agents  []*SquadAgent
+	bus     *MessageBus
+	status  SquadStatus
+	load    float32
+	tasks   int
+	results []*SquadResult
 }
 
 type SquadStatus string
@@ -47,13 +44,43 @@ type SquadAgent struct {
 type AgentWorkStatus string
 
 const (
-	AgentWorkIdle    AgentWorkStatus = "idle"
-	AgentWorkBusy   AgentWorkStatus = "busy"
-	AgentWorkDone   AgentWorkStatus = "done"
-	AgentWorkError  AgentWorkStatus = "error"
+	AgentWorkIdle  AgentWorkStatus = "idle"
+	AgentWorkBusy  AgentWorkStatus = "busy"
+	AgentWorkDone  AgentWorkStatus = "done"
+	AgentWorkError AgentWorkStatus = "error"
 )
 
-func NewSquad(id, name string, category agents.AgentCategory, bus *MessageBus, size int) *Squad {
+type AgentConfig struct {
+	Name      string
+	Specialty string
+}
+
+type SquadResult struct {
+	AgentID  string
+	Output   string
+	Duration time.Duration
+	Success  bool
+}
+
+type MessageBus struct {
+	messages chan *AgentMessage
+	mu       sync.RWMutex
+}
+
+type AgentMessage struct {
+	From    string
+	To      string
+	Content string
+	Type    string
+}
+
+func NewMessageBus() *MessageBus {
+	return &MessageBus{
+		messages: make(chan *AgentMessage, 100),
+	}
+}
+
+func NewSquad(id, name, category string, agentConfigs []AgentConfig, bus *MessageBus) *Squad {
 	squad := &Squad{
 		ID:       id,
 		Name:     name,
@@ -66,16 +93,11 @@ func NewSquad(id, name string, category agents.AgentCategory, bus *MessageBus, s
 
 	squad.Symbol = squad.getSymbol()
 
-	agentConfigs := agents.GetRegistry().ListByCategory(category)
-	if len(agentConfigs) > size {
-		agentConfigs = agentConfigs[:size]
-	}
-
 	for i, cfg := range agentConfigs {
 		agent := &SquadAgent{
-			ID:    fmt.Sprintf("%s-%d", id, i),
-			Name:  cfg.Name,
-			Role:  cfg.Specialty,
+			ID:     fmt.Sprintf("%s-%d", id, i),
+			Name:   cfg.Name,
+			Role:   cfg.Specialty,
 			Status: AgentWorkIdle,
 		}
 		squad.agents = append(squad.agents, agent)
@@ -85,166 +107,87 @@ func NewSquad(id, name string, category agents.AgentCategory, bus *MessageBus, s
 }
 
 func (s *Squad) getSymbol() string {
-	switch s.ID {
-	case "planning":
-		return "🏗️"
-	case "reasoning":
-		return "🧠"
-	case "design":
-		return "🎨"
-	case "research":
-		return "🔍"
-	case "sovereignty":
-		return "🛡️"
-	default:
-		return "⚡"
+	symbols := map[string]string{
+		"architects": "🏛️",
+		"thinkers":   "🧠",
+		"stylists":   "🎨",
+		"warriors":   "⚔️",
+		"builders":   "🔨",
 	}
+	if sym, ok := symbols[strings.ToLower(s.Category)]; ok {
+		return sym
+	}
+	return "🦂"
 }
 
-func (s *Squad) Execute(ctx context.Context, task string) *SquadResult {
+func (s *Squad) Start() {
 	s.mu.Lock()
-	s.status = SquadWorking
-	s.tasks++
-	result := &SquadResult{
-		SquadID:  s.ID,
-		StartTime: time.Now(),
-	}
-	s.mu.Unlock()
+	defer s.mu.Unlock()
+	s.status = SquadActive
+}
 
-	var wg sync.WaitGroup
-	results := make(chan string, len(s.agents))
-
-	for _, agent := range s.agents {
-		wg.Add(1)
-		go func(a *SquadAgent) {
-			defer wg.Done()
-
-			a.mu.Lock()
-			a.Status = AgentWorkBusy
-			a.Progress = 0
-			a.mu.Unlock()
-
-			output := s.executeAgentTask(ctx, a, task)
-
-			a.mu.Lock()
-			a.Status = AgentWorkDone
-			a.Progress = 1.0
-			a.Result = output
-			a.mu.Unlock()
-
-			results <- output
-		}(agent)
-	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	var outputs []string
-	for output := range results {
-		outputs = append(outputs, output)
-	}
-
+func (s *Squad) Stop() {
 	s.mu.Lock()
-	s.status = SquadDone
-	result.Output = strings.Join(outputs, "\n---\n")
-	result.Duration = time.Since(result.StartTime)
-	result.Success = true
-	result.Agents = len(s.agents)
-	s.results = append(s.results, result)
-	s.mu.Unlock()
-
-	return result
+	defer s.mu.Unlock()
+	s.status = SquadIdle
 }
 
-func (s *Squad) executeAgentTask(ctx context.Context, agent *SquadAgent, task string) string {
-	prompt := s.buildAgentPrompt(agent, task)
-
-	time.Sleep(100 * time.Millisecond)
-
-	return fmt.Sprintf("[%s] Task processed by %s (%s)", s.Symbol, agent.Name, agent.Role)
+func (s *Squad) GetStatus() SquadStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.status
 }
 
-func (s *Squad) buildAgentPrompt(agent *SquadAgent, task string) string {
-	return fmt.Sprintf(`%s | Agent: %s | Role: %s
-
-Tâche: %s
-
-Exécute ta spécialité avec excellence.
-Rapporte les résultats de manière concise.
-
-Je suis SIBY-AGENTIQ. Je sers Ibrahim Siby avec loyauté absolue.`, s.Name, agent.Name, agent.Role, task)
+func (s *Squad) GetAgents() []*SquadAgent {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.agents
 }
 
-func (s *Squad) GetStatus() *SquadStatus {
+func (s *Squad) GetResults() []*SquadResult {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.results
+}
+
+func (s *Squad) BroadcastTask(task string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	activeAgents := 0
-	totalProgress := float32(0)
+	for _, agent := range s.agents {
+		agent.mu.Lock()
+		agent.Status = AgentWorkBusy
+		agent.Result = ""
+		agent.mu.Unlock()
 
-	for _, a := range s.agents {
-		a.mu.Lock()
-		if a.Status == AgentWorkBusy {
-			activeAgents++
+		msg := &AgentMessage{
+			From:    "squad",
+			To:      agent.ID,
+			Content: task,
+			Type:    "task",
 		}
-		totalProgress += a.Progress
-		a.mu.Unlock()
-	}
-
-	if len(s.agents) > 0 {
-		s.load = totalProgress / float32(len(s.agents))
-	}
-
-	return &SquadStatus{
-		SquadID:    s.ID,
-		Name:       s.Name,
-		Symbol:     s.Symbol,
-		Status:     string(s.status),
-		Load:       s.load,
-		Active:     activeAgents,
-		Total:      len(s.agents),
-		Tasks:      s.tasks,
+		s.bus.messages <- msg
 	}
 }
 
-type SquadStatus struct {
-	SquadID string
-	Name    string
-	Symbol  string
-	Status  string
-	Load    float32
-	Active  int
-	Total   int
-	Tasks   int
+func (s *Squad) CollectResults() []*SquadResult {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.results
 }
 
-type StartTime time.Time
+func (s *Squad) Execute(task string) []*SquadResult {
+	s.mu.Lock()
+	s.status = SquadWorking
+	s.mu.Unlock()
 
-type SquadResult struct {
-	SquadID    string
-	Output     string
-	Success    bool
-	Duration   time.Duration
-	Agents     int
-	StartTime  time.Time
+	s.BroadcastTask(task)
+
+	time.Sleep(100 * time.Millisecond)
+
+	s.mu.Lock()
+	s.status = SquadDone
+	s.mu.Unlock()
+
+	return s.GetResults()
 }
-
-type SquadEvent struct {
-	Type    EventType
-	SquadID string
-	AgentID string
-	Message string
-	Time    time.Time
-}
-
-type EventType string
-
-const (
-	EventSquadStart   EventType = "squad_start"
-	EventSquadDone    EventType = "squad_done"
-	EventAgentStart   EventType = "agent_start"
-	EventAgentDone    EventType = "agent_done"
-	EventTaskComplete EventType = "task_complete"
-)

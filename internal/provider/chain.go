@@ -1,19 +1,18 @@
 package provider
 
 import (
-	"context"
 	"strings"
 )
 
 type ChainPhase string
 
 const (
-	PhaseSystem     ChainPhase = "system"
-	PhaseAnalyze    ChainPhase = "analyze"
-	PhasePlan       ChainPhase = "plan"
-	PhaseExecute    ChainPhase = "execute"
-	PhaseReview     ChainPhase = "review"
-	PhaseFinal      ChainPhase = "final"
+	PhaseSystem  ChainPhase = "system"
+	PhaseAnalyze ChainPhase = "analyze"
+	PhasePlan    ChainPhase = "plan"
+	PhaseExecute ChainPhase = "execute"
+	PhaseReview  ChainPhase = "review"
+	PhaseFinal   ChainPhase = "final"
 )
 
 type ChainStep struct {
@@ -55,7 +54,7 @@ func (cb *ChainBuilder) BuildInitialMessages(task string) []Message {
 	sb.WriteString(task)
 	sb.WriteString("\n\n## Reasoning Mode: ")
 	sb.WriteString(cb.cfg.ReasoningDepth)
-	
+
 	if cb.cfg.Enabled {
 		sb.WriteString("\n\nFollow the Chain of Thought process:")
 		if cb.cfg.ReasoningDepth == "deep" {
@@ -79,8 +78,8 @@ func (cb *ChainBuilder) BuildInitialMessages(task string) []Message {
 func (cb *ChainBuilder) ExtractPhases(response string) []ChainStep {
 	steps := make([]ChainStep, 0)
 	phases := []struct {
-		prefix  string
-		phase   ChainPhase
+		prefix string
+		phase  ChainPhase
 	}{
 		{"[ANALYZE]", PhaseAnalyze},
 		{"[ANALYSIS]", PhaseAnalyze},
@@ -91,10 +90,10 @@ func (cb *ChainBuilder) ExtractPhases(response string) []ChainStep {
 		{"[REVIEW]", PhaseReview},
 		{"[FINAL]", PhaseFinal},
 	}
-	
+
 	currentPhase := PhaseSystem
 	var currentContent strings.Builder
-	
+
 	for _, line := range strings.Split(response, "\n") {
 		matched := false
 		for _, p := range phases {
@@ -113,7 +112,7 @@ func (cb *ChainBuilder) ExtractPhases(response string) []ChainStep {
 			currentContent.WriteString("\n")
 		}
 	}
-	
+
 	if currentContent.Len() > 0 {
 		steps = append(steps, ChainStep{Phase: currentPhase, Content: currentContent.String()})
 	}
@@ -169,16 +168,16 @@ func (cf *ContextFormatter) FormatFileContent(files []FileContent) string {
 }
 
 type FileInfo struct {
-	Name    string
-	IsDir   bool
-	Depth   int
+	Name  string
+	IsDir bool
+	Depth int
 }
 
 type FileContent struct {
-	Path      string
-	Content   string
-	Language  string
-	MaxLines  int
+	Path     string
+	Content  string
+	Language string
+	MaxLines int
 }
 
 func getExt(name string) string {
@@ -191,23 +190,21 @@ func getExt(name string) string {
 
 func getFileIcon(ext string) string {
 	icons := map[string]string{
-		"go":     "🐹",
-		"rs":     "🦀",
-		"py":     "🐍",
-		"ts":     "📘",
-		"tsx":    "⚛️",
-		"js":     "📜",
-		"jsx":    "⚛️",
-		"java":   "☕",
-		"cpp":    "⚙️",
-		"c":      "⚙️",
-		"rs":     "🦀",
-		"md":     "📝",
-		"yaml":   "⚙️",
-		"yml":    "⚙️",
-		"json":   "📋",
-		"toml":   "📋",
-		"toml":   "📋",
+		"go":   "🐹",
+		"rs":   "🦀",
+		"py":   "🐍",
+		"ts":   "📘",
+		"tsx":  "⚛️",
+		"js":   "📜",
+		"jsx":  "⚛️",
+		"java": "☕",
+		"cpp":  "⚙️",
+		"c":    "⚙️",
+		"md":   "📝",
+		"yaml": "⚙️",
+		"yml":  "⚙️",
+		"json": "📋",
+		"toml": "📋",
 	}
 	if icon, ok := icons[ext]; ok {
 		return icon

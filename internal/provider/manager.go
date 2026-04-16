@@ -19,54 +19,12 @@ type ProviderManager struct {
 
 func NewProviderManager(cfg config.ProviderConfig) *ProviderManager {
 	pm := &ProviderManager{
-		providers: make(map[string]Provider),
+		providers:  make(map[string]Provider),
 		activeName: cfg.Active,
 		cfg:        cfg,
+		fallbacks:  []string{"ollama", "groq", "openai", "anthropic"},
 	}
-	pm.registerProviders()
-	pm.buildFallbackChain()
 	return pm
-}
-
-func (pm *ProviderManager) registerProviders() {
-	if pm.cfg.Ollama.Enabled {
-		pm.providers["ollama"] = NewOllamaProvider(pm.cfg.Ollama)
-	}
-	if pm.cfg.Groq.Enabled {
-		pm.providers["groq"] = NewGroqProvider(pm.cfg.Groq)
-	}
-	if pm.cfg.Anthropic.Enabled {
-		pm.providers["anthropic"] = NewAnthropicProvider(pm.cfg.Anthropic)
-	}
-	if pm.cfg.OpenAI.Enabled {
-		pm.providers["openai"] = NewOpenAIProvider(pm.cfg.OpenAI)
-	}
-}
-
-func (pm *ProviderManager) buildFallbackChain() {
-	var ranked []struct {
-		name     string
-		provider Provider
-		priority int
-	}
-	for name, p := range pm.providers {
-		ranked = append(ranked, struct {
-			name     string
-			provider Provider
-			priority int
-		}{name, p, p.Priority()})
-	}
-	for i := 0; i < len(ranked)-1; i++ {
-		for j := i + 1; j < len(ranked); j++ {
-			if ranked[j].priority < ranked[i].priority {
-				ranked[i], ranked[j] = ranked[j], ranked[i]
-			}
-		}
-	}
-	pm.fallbacks = make([]string, len(ranked))
-	for i, r := range ranked {
-		pm.fallbacks[i] = r.name
-	}
 }
 
 func (pm *ProviderManager) GetActiveProvider() Provider {
@@ -115,7 +73,7 @@ func (pm *ProviderManager) GetBestAvailable() Provider {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	for _, name := range pm.fallbacks {
-		if pm.providers[name].IsAvailable() {
+		if pm.providers[name] != nil && pm.providers[name].IsAvailable() {
 			return pm.providers[name]
 		}
 	}
@@ -154,7 +112,7 @@ func (pm *ProviderManager) SmartChat(ctx context.Context, req SmartChatRequest) 
 				continue
 			}
 			fallback := pm.providers[fallbackName]
-			if fallback.IsAvailable() {
+			if fallback != nil && fallback.IsAvailable() {
 				pm.activeName = fallbackName
 				return fallback.Chat(ctx, req.Messages)
 			}

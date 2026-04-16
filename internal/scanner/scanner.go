@@ -8,14 +8,22 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"github.com/siby-agentiq/siby-agentiq/internal/config"
 	"github.com/siby-agentiq/siby-agentiq/internal/provider"
 )
 
+type ScannerConfig struct {
+	MaxFiles        int
+	MaxFileSizeKB   int
+	ContextMode     string
+	IncludePatterns []string
+	ExcludePatterns []string
+	RootPatterns    []string
+}
+
 type ProjectScanner struct {
-	cfg    config.ScannerConfig
-	mu     sync.RWMutex
-	cache  map[string]*ProjectContext
+	cfg   ScannerConfig
+	mu    sync.RWMutex
+	cache map[string]*ProjectContext
 }
 
 type ProjectContext struct {
@@ -32,7 +40,7 @@ type ProjectSummary struct {
 	Dependencies []string
 }
 
-func NewProjectScanner(cfg config.ScannerConfig) *ProjectScanner {
+func NewProjectScanner(cfg ScannerConfig) *ProjectScanner {
 	return &ProjectScanner{
 		cfg:   cfg,
 		cache: make(map[string]*ProjectContext),
@@ -286,15 +294,15 @@ func getExtension(name string) string {
 
 func isMainFile(name, ext string) bool {
 	mains := map[string]bool{
-		"main.go":   true,
-		"main.rs":   true,
-		"main.py":   true,
-		"index.ts":  true,
-		"index.js":  true,
-		"app.go":    true,
-		"lib.rs":    true,
-		"App.tsx":   true,
-		"App.jsx":   true,
+		"main.go":  true,
+		"main.rs":  true,
+		"main.py":  true,
+		"index.ts": true,
+		"index.js": true,
+		"app.go":   true,
+		"lib.rs":   true,
+		"App.tsx":  true,
+		"App.jsx":  true,
 	}
 	return mains[name]
 }

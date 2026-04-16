@@ -26,19 +26,19 @@ type Scorpion struct {
 }
 
 type SearchResult struct {
-	Source    string
-	Query     string
-	Answer    string
-	Links     []string
-	Timestamp time.Time
+	Source     string
+	Query      string
+	Answer     string
+	Links      []string
+	Timestamp  time.Time
 	Confidence float64
-	Latency   time.Duration
+	Latency    time.Duration
 }
 
 type ScorpionConfig struct {
-	MaxResults  int
-	Timeout     time.Duration
-	Providers   []string
+	MaxResults int
+	Timeout    time.Duration
+	Providers  []string
 }
 
 var defaultConfig = &ScorpionConfig{
@@ -50,8 +50,8 @@ var defaultConfig = &ScorpionConfig{
 func NewScorpion(pm *provider.ProviderManager) *Scorpion {
 	return &Scorpion{
 		providerManager: pm,
-		results:          make(map[string]*SearchResult),
-		progressChan:     make(chan float64, 100),
+		results:         make(map[string]*SearchResult),
+		progressChan:    make(chan float64, 100),
 	}
 }
 
@@ -124,42 +124,57 @@ func (s *Scorpion) queryGemini(ctx context.Context, query string) string {
 	if s.providerManager == nil {
 		return s.fallbackSearch(query, "Gemini")
 	}
-	resp, err := s.providerManager.Generate(ctx, "gemini", fmt.Sprintf(
-		"You are a research assistant. Provide a comprehensive answer to: %s. "+
-		"Format: [GEMINI] Direct answer followed by relevant links in format: "+
-		"Source: [url]", query))
+	resp, err := s.providerManager.SmartChat(ctx, provider.SmartChatRequest{
+		Messages: []provider.Message{{Role: "user", Content: fmt.Sprintf(
+			"You are a research assistant. Provide a comprehensive answer to: %s. "+
+				"Format: [GEMINI] Direct answer followed by relevant links in format: "+
+				"Source: [url]", query)}},
+	})
 	if err != nil {
 		return s.fallbackSearch(query, "Gemini")
 	}
-	return resp
+	if resp != nil {
+		return resp.Message.Content
+	}
+	return s.fallbackSearch(query, "Gemini")
 }
 
 func (s *Scorpion) queryGPT4(ctx context.Context, query string) string {
 	if s.providerManager == nil {
 		return s.fallbackSearch(query, "GPT-4o")
 	}
-	resp, err := s.providerManager.Generate(ctx, "gpt-4o", fmt.Sprintf(
-		"You are a research assistant. Provide a comprehensive answer to: %s. "+
-		"Format: [GPT-4o] Direct answer followed by relevant links in format: "+
-		"Source: [url]", query))
+	resp, err := s.providerManager.SmartChat(ctx, provider.SmartChatRequest{
+		Messages: []provider.Message{{Role: "user", Content: fmt.Sprintf(
+			"You are a research assistant. Provide a comprehensive answer to: %s. "+
+				"Format: [GPT-4o] Direct answer followed by relevant links in format: "+
+				"Source: [url]", query)}},
+	})
 	if err != nil {
 		return s.fallbackSearch(query, "GPT-4o")
 	}
-	return resp
+	if resp != nil {
+		return resp.Message.Content
+	}
+	return s.fallbackSearch(query, "GPT-4o")
 }
 
 func (s *Scorpion) queryPerplexity(ctx context.Context, query string) string {
 	if s.providerManager == nil {
 		return s.fallbackSearch(query, "Perplexity")
 	}
-	resp, err := s.providerManager.Generate(ctx, "perplexity", fmt.Sprintf(
-		"You are a research assistant with real-time web access. Provide current information about: %s. "+
-		"Format: [PERPLEXITY] Direct answer followed by relevant links in format: "+
-		"Source: [url]", query))
+	resp, err := s.providerManager.SmartChat(ctx, provider.SmartChatRequest{
+		Messages: []provider.Message{{Role: "user", Content: fmt.Sprintf(
+			"You are a research assistant with real-time web access. Provide current information about: %s. "+
+				"Format: [PERPLEXITY] Direct answer followed by relevant links in format: "+
+				"Source: [url]", query)}},
+	})
 	if err != nil {
 		return s.fallbackSearch(query, "Perplexity")
 	}
-	return resp
+	if resp != nil {
+		return resp.Message.Content
+	}
+	return s.fallbackSearch(query, "Perplexity")
 }
 
 func (s *Scorpion) fallbackSearch(query, source string) string {
@@ -195,9 +210,9 @@ func (s *Scorpion) synthesize(query string) *ScorpionSynthesis {
 	defer s.mu.RUnlock()
 
 	synthesis := &ScorpionSynthesis{
-		Query:      query,
-		Results:    make([]*SearchResult, 0, len(s.results)),
-		Timestamp:  time.Now(),
+		Query:       query,
+		Results:     make([]*SearchResult, 0, len(s.results)),
+		Timestamp:   time.Now(),
 		FinalAnswer: "",
 	}
 
@@ -238,12 +253,12 @@ func (s *Scorpion) generateFinalAnswer(query string, synthesis *ScorpionSynthesi
 			fmt.Sprintf("%.0f%%", result.Confidence*100), ScorpionReset))
 		sb.WriteString(fmt.Sprintf("  %s├──────────────────────────────────────────────────────────────┤%s\n",
 			ScorpionYellow, ScorpionReset))
-		
+
 		lines := wrapText(result.Answer, 60)
 		for _, line := range lines {
 			sb.WriteString(fmt.Sprintf("  %s│  %s%s%s │%s\n", ScorpionYellow, ScorpionReset, padRight(line, 60), ScorpionYellow, ScorpionReset))
 		}
-		
+
 		if len(result.Links) > 0 {
 			sb.WriteString(fmt.Sprintf("  %s│  Liens: %s%s\n", ScorpionYellow, strings.Join(result.Links[:3], ", "), ScorpionReset))
 		}
@@ -293,13 +308,13 @@ func (s *Scorpion) runProgressAnimation(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if idx < len(frames) {
-				fmt.Printf("\r  %s%s🦂 SCORPION SEARCH:%s %s%s%s", 
-					ScorpionYellow, ScorpionBlack, ScorpionReset, 
+				fmt.Printf("\r  %s%s🦂 SCORPION SEARCH:%s %s%s%s",
+					ScorpionYellow, ScorpionBlack, ScorpionReset,
 					ScorpionYellow, frames[idx], ScorpionReset)
 				idx++
 			}
 			if idx >= len(frames) {
-				fmt.Printf("\r  %s%s🦂 SCORPION SEARCH:%s COMPLETE!          %s", 
+				fmt.Printf("\r  %s%s🦂 SCORPION SEARCH:%s COMPLETE!          %s",
 					ScorpionYellow, ScorpionBlack, ScorpionReset, ScorpionReset)
 				return
 			}

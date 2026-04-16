@@ -6,317 +6,136 @@ import (
 	"sync"
 	"time"
 
-	"github.com/siby-agentiq/siby-agentiq/internal/agents"
-	"github.com/siby-agentiq/siby-agentiq/internal/deepmemory"
+	"github.com/siby-agentiq/siby-agentiq/internal/provider"
 )
 
 type Orchestrator struct {
-	id       string
-	mu       sync.RWMutex
-	status   OrchestratorStatus
-
-	bus        *MessageBus
-	kernel    *Kernel
-	brain     *deepmemory.Brain
-
-	squads     map[string]*Squad
-	squadOrder []string
-
-	events     chan *SquadEvent
-	dashboard *SquadDashboard
+	id     string
+	mu     sync.RWMutex
+	status OrchestratorStatus
+	bus    *MessageBus
+	kernel *Kernel
+	squads map[string]*Squad
+	pm     *provider.ProviderManager
 }
 
 type OrchestratorStatus string
 
 const (
-	OrchestratorIdle       OrchestratorStatus = "idle"
-	OrchestratorRunning    OrchestratorStatus = "running"
-	OrchestratorThinking   OrchestratorStatus = "thinking"
-	OrchestratorBuilding  OrchestratorStatus = "building"
+	OrchestratorIdle     OrchestratorStatus = "idle"
+	OrchestratorRunning  OrchestratorStatus = "running"
+	OrchestratorThinking OrchestratorStatus = "thinking"
+	OrchestratorBuilding OrchestratorStatus = "building"
 )
-
-type MessageBus struct {
-	mu       sync.RWMutex
-	channels map[string]chan *Message
-}
-
-type Message struct {
-	From      string
-	To        string
-	Type      MessageType
-	Payload   interface{}
-	Timestamp time.Time
-	Ack       bool
-}
-
-type MessageType string
-
-const (
-	MsgTask         MessageType = "task"
-	MsgResult       MessageType = "result"
-	MsgHeartbeat    MessageType = "heartbeat"
-	MsgStatus       MessageType = "status"
-	MsgError        MessageType = "error"
-	MsgBroadcast    MessageType = "broadcast"
-)
-
-func NewMessageBus() *MessageBus {
-	return &MessageBus{
-		channels: make(map[string]chan *Message),
-	}
-}
-
-func (mb *MessageBus) Subscribe(agentID string) chan *Message {
-	mb.mu.Lock()
-	defer mb.mu.Unlock()
-
-	ch := make(chan *Message, 100)
-	mb.channels[agentID] = ch
-	return ch
-}
-
-func (mb *MessageBus) Unsubscribe(agentID string) {
-	mb.mu.Lock()
-	defer mb.mu.Unlock()
-
-	if ch, ok := mb.channels[agentID]; ok {
-		close(ch)
-		delete(mb.channels, agentID)
-	}
-}
-
-func (mb *MessageBus) Send(msg *Message) {
-	mb.mu.RLock()
-	defer mb.mu.RUnlock()
-
-	if ch, ok := mb.channels[msg.To]; ok {
-		select {
-		case ch <- msg:
-		default:
-		}
-	}
-}
-
-func (mb *MessageBus) Broadcast(msg *Message) {
-	mb.mu.RLock()
-	defer mb.mu.RUnlock()
-
-	for agentID, ch := range mb.channels {
-		if agentID != msg.From {
-			select {
-			case ch <- msg:
-			default:
-			}
-		}
-	}
-}
 
 func NewOrchestrator() *Orchestrator {
-	o := &Orchestrator{
-		id:    fmt.Sprintf("orch-%d", time.Now().UnixNano()),
-		bus:   NewMessageBus(),
-		brain: deepmemory.NewBrain(),
-		squads: make(map[string]*Squad),
-		events: make(chan *SquadEvent, 1000),
+	return &Orchestrator{
+		id:     "main",
 		status: OrchestratorIdle,
+		bus:    NewMessageBus(),
+		squads: make(map[string]*Squad),
+	}
+}
+
+func (o *Orchestrator) SetProviderManager(pm *provider.ProviderManager) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.pm = pm
+	o.kernel = NewKernel(pm)
+}
+
+func (o *Orchestrator) Start() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.status = OrchestratorRunning
+}
+
+func (o *Orchestrator) Stop() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.status = OrchestratorIdle
+}
+
+func (o *Orchestrator) GetStatus() OrchestratorStatus {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.status
+}
+
+func (o *Orchestrator) RegisterSquad(squad *Squad) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.squads[squad.ID] = squad
+}
+
+func (o *Orchestrator) GetSquad(id string) *Squad {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.squads[id]
+}
+
+func (o *Orchestrator) ListSquads() []*Squad {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	squads := make([]*Squad, 0, len(o.squads))
+	for _, s := range o.squads {
+		squads = append(squads, s)
+	}
+	return squads
+}
+
+func (o *Orchestrator) Execute(ctx context.Context, task string) (*ExecutionResult, error) {
+	o.mu.Lock()
+	o.status = OrchestratorThinking
+	o.mu.Unlock()
+
+	result := &ExecutionResult{
+		Task:     task,
+		Start:    time.Now(),
+		Duration: 0,
 	}
 
-	o.kernel = NewKernel(o.brain, nil)
-	o.dashboard = NewSquadDashboard(o)
+	if o.kernel != nil {
+		output, err := o.kernel.Process(ctx, task)
+		if err != nil {
+			result.Success = false
+			result.Error = err.Error()
+			return result, err
+		}
+		result.Success = true
+		result.Output = output
+	} else {
+		result.Success = true
+		result.Output = fmt.Sprintf("[SIBY] Task executed: %s", task)
+	}
 
-	o.initSquads()
-
-	return o
-}
-
-func (o *Orchestrator) initSquads() {
-	o.squads["planning"] = NewSquad("planning", "SQUAD PLANIFICATION", agents.CatArchitect, o.bus, 10)
-	o.squads["reasoning"] = NewSquad("reasoning", "SQUAD RAISONNEMENT", agents.CatThinker, o.bus, 10)
-	o.squads["design"] = NewSquad("design", "SQUAD DESIGN & BINAIRE", agents.CatStylist, o.bus, 10)
-	o.squads["research"] = NewSquad("research", "SQUAD RECHERCHE", agents.CatScout, o.bus, 5)
-	o.squads["sovereignty"] = NewSquad("sovereignty", "SQUAD SOUVERAINETÉ", agents.CatEnforcer, o.bus, 10)
-
-	o.squadOrder = []string{"planning", "reasoning", "design", "research", "sovereignty"}
-}
-
-func (o *Orchestrator) Execute(task string) *ExecutionResult {
 	o.mu.Lock()
 	o.status = OrchestratorRunning
 	o.mu.Unlock()
 
-	result := &ExecutionResult{
-		Task:      task,
-		StartTime: time.Now(),
-		Squads:    make(map[string]*SquadResult),
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
-	o.broadcast(&Message{
-		Type:    MsgBroadcast,
-		Payload: map[string]interface{}{"task": task, "action": "start"},
-	})
-
-	var wg sync.WaitGroup
-	squadResults := make(chan *SquadResult, len(o.squads))
-
-	for squadID := range o.squads {
-		wg.Add(1)
-		go func(sID string) {
-			defer wg.Done()
-
-			squad := o.squads[sID]
-			squadResult := squad.Execute(ctx, task)
-
-			o.broadcast(&Message{
-				To:      "dashboard",
-				Type:    MsgStatus,
-				Payload: squadResult,
-			})
-
-			squadResults <- squadResult
-		}(squadID)
-	}
-
-	go func() {
-		wg.Wait()
-		close(squadResults)
-	}()
-
-	var completed int
-	for sr := range squadResults {
-		result.Squads[sr.SquadID] = sr
-		completed++
-
-		if completed == 3 {
-			break
-		}
-	}
-
-	result.Synthesis = o.synthesize(result)
-	result.Duration = time.Since(result.StartTime)
-	result.Success = completed > 0
-
-	o.mu.Lock()
-	o.status = OrchestratorIdle
-	o.mu.Unlock()
-
-	o.broadcast(&Message{
-		Type:    MsgBroadcast,
-		Payload: map[string]interface{}{"task": task, "action": "complete"},
-	})
-
-	return result
-}
-
-func (o *Orchestrator) ExecuteSequential(task string) *ExecutionResult {
-	o.mu.Lock()
-	o.status = OrchestratorRunning
-	o.mu.Unlock()
-
-	result := &ExecutionResult{
-		Task:      task,
-		StartTime: time.Now(),
-		Squads:    make(map[string]*SquadResult),
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
-	for i, squadID := range o.squadOrder {
-		squad := o.squads[squadID]
-		squadResult := squad.Execute(ctx, task)
-
-		result.Squads[squadID] = squadResult
-		result.Synthesis += fmt.Sprintf("\n[SQUAD %d: %s]\n%s\n", i+1, squad.Name, squadResult.Output)
-
-		o.dashboard.Update()
-
-		if !squadResult.Success {
-			break
-		}
-	}
-
-	result.Duration = time.Since(result.StartTime)
-	result.Success = true
-
-	o.mu.Lock()
-	o.status = OrchestratorIdle
-	o.mu.Unlock()
-
-	return result
-}
-
-func (o *Orchestrator) broadcast(msg *Message) {
-	msg.Timestamp = time.Now()
-	o.bus.Broadcast(msg)
-}
-
-func (o *Orchestrator) synthesize(result *ExecutionResult) string {
-	var sb strings.Builder
-
-	sb.WriteString("═══════════════════════════════════════════════════════════\n")
-	sb.WriteString("         SYNTHÈSE SIBY-AGENTIQ MULTI-AGENTS\n")
-	sb.WriteString("═══════════════════════════════════════════════════════════\n\n")
-
-	sb.WriteString("┌─────────────────────────────────────────────────────────┐\n")
-	sb.WriteString("│                    LOYAUTÉ ABSOLUE                      │\n")
-	sb.WriteString("│        Je sers Ibrahim Siby avec excellence            │\n")
-	sb.WriteString("└─────────────────────────────────────────────────────────┘\n\n")
-
-	for squadID, sr := range result.Squads {
-		squad := o.squads[squadID]
-		sb.WriteString(fmt.Sprintf("[%s] %s\n", squad.Symbol, squad.Name))
-		if sr.Success {
-			sb.WriteString("  ✓ Opération réussie\n")
-		} else {
-			sb.WriteString("  ✗ Opération échouée\n")
-		}
-		sb.WriteString(fmt.Sprintf("  Output: %s\n\n", truncate(sr.Output, 200)))
-	}
-
-	sb.WriteString("═══════════════════════════════════════════════════════════\n")
-	sb.WriteString(fmt.Sprintf("Durée totale: %v\n", result.Duration))
-	sb.WriteString("═══════════════════════════════════════════════════════════\n")
-
-	return sb.String()
-}
-
-func (o *Orchestrator) GetDashboard() *SquadDashboard {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	return o.dashboard
-}
-
-func (o *Orchestrator) GetSquadStatus() map[string]*SquadStatus {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-
-	status := make(map[string]*SquadStatus)
-	for id, squad := range o.squads {
-		status[id] = squad.GetStatus()
-	}
-	return status
+	result.Duration = time.Since(result.Start)
+	return result, nil
 }
 
 type ExecutionResult struct {
-	Task      string
-	Squads    map[string]*SquadResult
-	Synthesis string
-	Duration  time.Duration
-	Success   bool
-}
-
-type SquadResult struct {
-	SquadID  string
+	Task     string
 	Output   string
 	Success  bool
+	Error    string
+	Start    time.Time
 	Duration time.Duration
-	Agents   int
+	Squads   int
 }
 
-import "strings"
+func (o *Orchestrator) CreateSquad(id, name, category string) *Squad {
+	configs := []AgentConfig{
+		{Name: "Agent-1", Specialty: "general"},
+		{Name: "Agent-2", Specialty: "review"},
+	}
+	squad := NewSquad(id, name, category, configs, o.bus)
+	o.RegisterSquad(squad)
+	return squad
+}
 
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {

@@ -8,17 +8,17 @@ import (
 )
 
 type AutoConfig struct {
-	mu sync.RWMutex
-	detectedEnvVars map[string]string
+	mu                  sync.RWMutex
+	detectedEnvVars     map[string]string
 	recommendedProvider string
-	apiKeysFound []string
+	apiKeysFound        []string
 }
 
 var autoConfig *AutoConfig
 
 func InitAutoConfig() *AutoConfig {
 	autoConfig = &AutoConfig{
-		detectedEnvVars: make(map[string]string),
+		detectedEnvVars:     make(map[string]string),
 		recommendedProvider: "ollama",
 	}
 	autoConfig.detectEnvironment()
@@ -80,7 +80,7 @@ func (ac *AutoConfig) GetDetectedVariables() map[string]string {
 func (ac *AutoConfig) HasAPIKey(provider string) bool {
 	ac.mu.RLock()
 	defer ac.mu.RUnlock()
-	
+
 	switch provider {
 	case "anthropic":
 		_, ok := ac.detectedEnvVars["ANTHROPIC_API_KEY"]
@@ -105,31 +105,28 @@ func (ac *AutoConfig) GenerateAutoConfig() config.ProviderConfig {
 
 	if host, ok := ac.detectedEnvVars["OLLAMA_HOST"]; ok {
 		cfg.Ollama = config.OllamaConfig{
-			Enabled:    true,
-			BaseURL:    host,
-			Model:      "llama3.2:latest",
-			Timeout:    120,
-			Stream:     true,
-			KeepAlive:  "5m",
+			BaseURL:   host,
+			Model:     "llama3.2:latest",
+			Timeout:   120,
+			Stream:    true,
+			KeepAlive: "5m",
 		}
 	}
 
 	if key, ok := ac.detectedEnvVars["ANTHROPIC_API_KEY"]; ok {
 		cfg.Anthropic = config.AnthropicConfig{
-			Enabled:     true,
-			APIKey:     key,
-			Model:      "claude-sonnet-4-20250514",
-			MaxTokens:  8192,
+			APIKey:      key,
+			Model:       "claude-sonnet-4-20250514",
+			MaxTokens:   8192,
 			Temperature: 0.7,
 		}
 	}
 
 	if key, ok := ac.detectedEnvVars["OPENAI_API_KEY"]; ok {
 		cfg.OpenAI = config.OpenAIConfig{
-			Enabled:    true,
-			APIKey:    key,
-			BaseURL:   "https://api.openai.com/v1",
-			Model:     "gpt-4o",
+			APIKey:      key,
+			BaseURL:     "https://api.openai.com/v1",
+			Model:       "gpt-4o",
 			Temperature: 0.7,
 		}
 	}
@@ -142,7 +139,7 @@ func (ac *AutoConfig) GetWelcomeMessage() string {
 	defer ac.mu.RUnlock()
 
 	var msg string
-	
+
 	if len(ac.apiKeysFound) > 0 {
 		msg = "Detected API keys:\n"
 		for _, key := range ac.apiKeysFound {
@@ -154,7 +151,7 @@ func (ac *AutoConfig) GetWelcomeMessage() string {
 	}
 
 	msg += "Recommended provider: " + ac.recommendedProvider + "\n"
-	
+
 	if ac.recommendedProvider == "ollama" {
 		msg += "\nTip: Install Ollama for 100% local, free AI.\n"
 		msg += "  Linux/Mac: curl -fsSL https://ollama.ai/install.sh | sh\n"
